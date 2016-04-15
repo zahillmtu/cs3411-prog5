@@ -167,7 +167,46 @@ void example_listen(int sock, int queueSize)
 	}
 }
 
+void recvBytes(int sock, char * recvbuf, int bufSize) {
 
+    ssize_t recvdBytes = 0;
+
+    recvdBytes = recv(sock, recvbuf, bufSize, 0);
+    if(recvdBytes < 0) {
+    	perror("recv:");
+    	close(sock);
+    	exit(EXIT_FAILURE);
+    }
+
+}
+
+/**
+ * Wrapper method for closing the socket
+ */
+void closeSock(int sock) {
+    if(close(sock) == -1)
+    {
+	perror("close");
+	exit(EXIT_FAILURE);
+    }
+}
+
+/**
+ * Method to validate the password sent to server from the client
+ */
+int checkPass(int sock) {
+
+    char recvbuf[1024];
+
+    recvBytes(sock, recvbuf, 1024);
+    printf("Password received: %s\n", recvbuf);
+    // check if it is equal to the password
+    if(strcmp(recvbuf, password) == 0) {
+        return 1;
+    } else {
+        return -1;
+    }
+}
 
 int main(int argc, char* argv[])
 {
@@ -210,13 +249,29 @@ int main(int argc, char* argv[])
 			perror("accept(): ");
 			continue; // try again if accept failed.
 		}
+                printf("Client connected\n");
+
+                // Check the password of the client
+                if (checkPass(newsock) == -1) {
+                    printf("Incorrect password - Connection aborted\n");
+                    closeSock(newsock);
+                    continue;
+                } else {
+                    printf("Password accepted - Continuing connection\n");
+                }
 
 		if(send(newsock, "You connected!\n", strlen("You connected!\n"), 0) == -1)
 		{
 			perror("send");
-			close(newsock);
+			closeSock(newsock);
 			exit(EXIT_FAILURE);
 		}
+
+                char cmd[1024];
+                recvBytes(newsock, cmd, 1024);
+
+                printf("Received command: %s\n", cmd);
+
 //		char http_body[] = "hello world";
 //		char http_headers[1024];
 //		snprintf(http_headers, 1024,
@@ -266,11 +321,7 @@ int main(int argc, char* argv[])
 		}
 #endif
 
-		if(close(newsock) == -1)
-		{
-			perror("close");
-			exit(EXIT_FAILURE);
-		}
+		closeSock(newsock);
 	}
 }
 
@@ -279,4 +330,6 @@ int main(int argc, char* argv[])
  * ----------
  *  code from Dr. Kuhl
  *      https://github.com/skuhl/sys-prog-examples/blob/master/simple-examples/internet-stream-client.c
+ *  Guide by Beej
+ *      http://beej.us/guide/bgnet/output/html/singlepage/bgnet.html
  */

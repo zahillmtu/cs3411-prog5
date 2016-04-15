@@ -93,6 +93,13 @@ int main(int argc, char* argv[])
 	example_connect(sock, socketaddrinfo);
 	freeaddrinfo(socketaddrinfo); // done with socketaddrinfo
 
+        // send the password
+        if(send(sock, password, strlen(password), 0) == -1)
+        {
+        	perror("send");
+        	close(sock);
+        	exit(EXIT_FAILURE);
+        }
 
 	char recvbuf[1024];
 	ssize_t recvdBytes = 0;
@@ -112,6 +119,14 @@ int main(int argc, char* argv[])
 		close(sock);
 		exit(EXIT_FAILURE);
 	}
+
+        // send the command
+        if(send(sock, argv[3], strlen(argv[3]), 0) == -1)
+        {
+        	perror("send");
+        	close(sock);
+        	exit(EXIT_FAILURE);
+        }
 
 
 	// Send an HTTP request:
@@ -174,4 +189,6 @@ int main(int argc, char* argv[])
  * ----------
  *  code from Dr. Kuhl
  *      https://github.com/skuhl/sys-prog-examples/blob/master/simple-examples/internet-stream-client.c
+ *  guide by Beej
+ *      http://beej.us/guide/bgnet/output/html/singlepage/bgnet.html
  */
