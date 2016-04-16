@@ -26,9 +26,9 @@ void createSubdir(void) {
 
     // create the directory if it does not exist
     if (stat(dir, &st) == -1) {
-        printf("Creating files directory\n");
+        printf("Creating files subdirectory\n");
         if (mkdir(dir, 0700) == -1) {
-            perror(dir);
+            perror("mkdir");
             exit(1); // May not want to do this
         }
     }
@@ -208,8 +208,9 @@ void sendBytes(int sock, char * bytes, size_t size) {
 int checkPass(int sock) {
 
     char recvbuf[1024];
+    memset(recvbuf, 0, 1024);
 
-    recvBytes(sock, recvbuf, 1024);
+    recvBytes(sock, recvbuf, strlen(password));
     printf("Password received: %s\n", recvbuf);
     // check if it is equal to the password
     if(strcmp(recvbuf, password) == 0) {
@@ -257,6 +258,38 @@ void sendList(int sock) {
     free(namelist);
 
     closeSock(sock);
+}
+
+/**
+ * Method to send the bytes of a file to the client
+ */
+void getFile(int sock, char * filename) {
+
+    printf("Looking for file %s\n", filename);
+
+    FILE * fp = fopen(filename, "r");
+    if (fp == NULL) { // the file did not exist
+        // close the socket
+        perror("fopen");
+        closeSock(sock);
+        return;
+    }
+
+    printf("Found the file %s, sending Found\n", filename);
+    // Send bytes to say we found it
+    sendBytes(sock, "Found", strlen("Found"));
+
+    // Send the bytes of the file
+    char buf[1024];
+    memset(buf, 0, 1024);
+    ssize_t retVal = 1024;
+
+    while (retVal == 1024) {
+        retVal = fread(buf, 1, 1024, fp);
+        sendBytes(sock, buf, strlen(buf));
+    }
+    closeSock(sock);
+    fclose(fp);
 }
 
 int main(int argc, char* argv[])
@@ -325,6 +358,19 @@ int main(int argc, char* argv[])
                     // Scan the dirextory and send the file list
                     sendList(newsock);
                     continue;
+                }
+
+                if (strcmp(cmd, "get") == 0) {
+                    char retBuf[1024];
+                    memset(retBuf, 0, 1024);
+
+                    // Read the name of the file
+                    recvBytes(newsock, retBuf, 1024);
+
+                    // Check if the file exists and send it
+                    getFile(newsock, retBuf);
+                    continue;
+
                 }
 
 //		char http_body[] = "hello world";

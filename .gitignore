@@ -2,3 +2,4 @@ internet-stream-client.c
 internet-stream-server.c
 fileserver.tgz
 files/
+test.txt

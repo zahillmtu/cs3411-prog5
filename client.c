@@ -82,6 +82,7 @@ void closeSock(int sock) {
 
 /**
  * Wrapper function to control recieving bytes from the socket
+ * Set getVal to true when running the get command
  */
 int recvBytes(int sock, char * recvbuf, int bufSize) {
 
@@ -95,9 +96,36 @@ int recvBytes(int sock, char * recvbuf, int bufSize) {
     }
     else if(recvdBytes == 0) // server closed connection
     {
-	fflush(stdout);
+        fflush(stdout);
 	close(sock);
 	exit(EXIT_SUCCESS);
+    }
+    return recvdBytes;
+
+}
+
+/**
+ * Wrapper function to control recieving bytes from the socket
+ * Set waitVal to true when waiting for "Found"
+ */
+int getRecvBytes(int sock, char * recvbuf, int bufSize, int waitVal) {
+
+    ssize_t recvdBytes = 0;
+
+    recvdBytes = recv(sock, recvbuf, bufSize, 0);
+    if(recvdBytes < 0) {
+    	perror("recv:");
+    	close(sock);
+    	exit(EXIT_FAILURE);
+    }
+    else if(recvdBytes == 0) // server closed connection
+    {
+        if (waitVal) {
+            printf("ERROR - Server did not find file. Exiting...\n");
+            fflush(stdout);
+	    close(sock);
+	    exit(EXIT_FAILURE);
+        }
     }
     return recvdBytes;
 
@@ -114,6 +142,60 @@ void sendBytes(int sock, char * bytes, size_t size) {
 		closeSock(sock);
 		exit(EXIT_FAILURE);
 	}
+}
+
+/**
+ * Method to interact with the server when the "list" command is sent
+ */
+void listCmd(int sock) {
+
+        while(1) {
+
+            char retBuf[1024];
+            ssize_t ret = 0;
+            memset(retBuf, 0, 1024);
+
+            ret = recvBytes(sock, retBuf, 1024);
+
+	    fwrite(retBuf, 1, ret, stdout);
+        }
+}
+
+void getCmd(int sock, char * filename) {
+
+    // First send the name of the file
+    sendBytes(sock, filename, strlen(filename));
+
+    // Recieve the found command
+    char recvbuf[1024];
+    memset(recvbuf, 0, 1024);
+    getRecvBytes(sock, recvbuf, strlen("Found"), 1);
+    if (strcmp(recvbuf, "Found") != 0) {
+        printf("ERROR - Server could not find file.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    // create a file to write the contents into
+    FILE * fp = fopen(filename, "w");
+    if (fp == NULL) {
+        perror("fopen");
+        exit(EXIT_FAILURE);
+    }
+
+    // continually read the bytes and write the data
+    while(1) {
+
+        ssize_t ret = 0;
+        memset(recvbuf, 0, 1024);
+
+        ret = getRecvBytes(sock, recvbuf, 1024, 0);
+        if (ret == 0) {
+            // server closed connection, close the file
+            fclose(fp);
+            exit(EXIT_SUCCESS);
+        }
+        fwrite(recvbuf, 1, ret, fp);
+    }
 }
 
 
@@ -147,22 +229,22 @@ int main(int argc, char* argv[])
 	char recvbuf[1024];
 	ssize_t recvdBytes = 0;
 
+        // Recieve connection confirmation
 	recvdBytes = recvBytes(sock, recvbuf, 1024);
 	fwrite(recvbuf, 1, recvdBytes, stdout);
 
         // send the command
         sendBytes(sock, argv[3], strlen(argv[3]));
 
-        // Recieve the bytes and print them out
-        while(1) {
-
-            char retBuf[1024];
-            ssize_t ret = 0;
-            memset(retBuf, 0, 1024);
-
-            ret = recvBytes(sock, retBuf, 1024);
-
-	    fwrite(retBuf, 1, ret, stdout);
+        if (strcmp(argv[3], "list") == 0) {
+            // Recieve the bytes and print them out
+            listCmd(sock);
+        } else if (strcmp(argv[3], "get") == 0) {
+            if (argc < 5) {
+                printf("ERROR - No filename specified. Exiting...\n");
+                exit(EXIT_FAILURE);
+            }
+            getCmd(sock, argv[4]);
         }
 
         exit(EXIT_FAILURE);
