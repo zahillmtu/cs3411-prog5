@@ -9,6 +9,7 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <libgen.h>
 
 #include <arpa/inet.h>
 
@@ -163,7 +164,7 @@ void listCmd(int sock) {
 
 void getCmd(int sock, char * filename) {
 
-    // First send the name of the file
+    // Send the name of the file
     sendBytes(sock, filename, strlen(filename));
 
     // Recieve the found command
@@ -196,6 +197,38 @@ void getCmd(int sock, char * filename) {
         }
         fwrite(recvbuf, 1, ret, fp);
     }
+}
+
+void putCmd(int sock, char * filename) {
+
+    printf("Sending file\n");
+
+    // First send the name of the file
+    char withnl[1024];
+    memset(withnl, 0, 1024);
+    strcat(withnl, filename);
+    strcat(withnl, "\n");
+    sendBytes(sock, withnl, strlen(withnl));
+
+    FILE * fp = fopen(filename, "r");
+    if (fp == NULL) { // the file did not exist
+        // close the socket
+        perror("fopen");
+        closeSock(sock);
+        exit(EXIT_FAILURE);
+    }
+
+    // Send the bytes of the file
+    char buf[1024];
+    memset(buf, 0, 1024);
+    ssize_t retVal = 1024;
+
+    while (retVal == 1024) {
+        retVal = fread(buf, 1, 1024, fp);
+        sendBytes(sock, buf, strlen(buf));
+    }
+    closeSock(sock);
+    fclose(fp);
 }
 
 
@@ -238,14 +271,25 @@ int main(int argc, char* argv[])
 
         if (strcmp(argv[3], "list") == 0) {
             // Recieve the bytes and print them out
+            if (argc > 4) {
+                printf("USAGE ERROR - Too many arguments\n");
+                exit(EXIT_FAILURE);
+            }
             listCmd(sock);
         } else if (strcmp(argv[3], "get") == 0) {
-            if (argc < 5) {
+            if (argc < 5 || argc > 5) {
                 printf("ERROR - No filename specified. Exiting...\n");
                 exit(EXIT_FAILURE);
             }
             getCmd(sock, argv[4]);
+        } else if (strcmp(argv[3], "put") == 0) {
+            if (argc < 5 || argc > 5) {
+                printf("ERROR - No filename specified. Exiting...\n");
+                exit(EXIT_FAILURE);
+            }
+            putCmd(sock, basename(argv[4]));
         }
+
 
         exit(EXIT_FAILURE);
 

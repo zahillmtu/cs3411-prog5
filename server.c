@@ -179,7 +179,7 @@ void closeSock(int sock) {
     }
 }
 
-void recvBytes(int sock, char * recvbuf, int bufSize) {
+int recvBytes(int sock, char * recvbuf, int bufSize) {
 
     ssize_t recvdBytes = 0;
 
@@ -189,7 +189,7 @@ void recvBytes(int sock, char * recvbuf, int bufSize) {
     	close(sock);
     	exit(EXIT_FAILURE);
     }
-
+    return recvdBytes;
 }
 
 void sendBytes(int sock, char * bytes, size_t size) {
@@ -292,6 +292,60 @@ void getFile(int sock, char * filename) {
     fclose(fp);
 }
 
+void putFile(int sock, char * filename) {
+
+    printf("Putting in file %s\n", filename);
+
+    char recvbuf[1024];
+    memset(recvbuf, 0, 1024);
+
+    // create a file to write the contents into
+    FILE * fp = fopen(filename, "w");
+    if (fp == NULL) {
+        perror("fopen");
+        exit(EXIT_FAILURE);
+    }
+
+    // continually read the bytes and write the data
+    while(1) {
+
+        ssize_t ret = 0;
+        memset(recvbuf, 0, 1024);
+
+        ret = recvBytes(sock, recvbuf, 1024);
+        if (ret == 0) {
+            // server closed connection, close the file
+            fclose(fp);
+            return;
+        }
+        fwrite(recvbuf, 1, ret, fp);
+    }
+
+}
+
+void getLine(int sock, char line[1024]) {
+
+    ssize_t recvdBytes = 0;
+    char byte[2];
+    memset(line, 0, 1024);
+
+
+    while (1) {
+        memset(byte, 0, 2);
+        recvdBytes = recv(sock, byte, 1, 0);
+            if(recvdBytes < 0) {
+            	perror("recv:");
+            	close(sock);
+            	exit(EXIT_FAILURE);
+            }
+        if (byte[0] == '\n') {
+            break;
+        }
+        strcat(line, byte);
+    }
+
+}
+
 int main(int argc, char* argv[])
 {
 
@@ -370,7 +424,18 @@ int main(int argc, char* argv[])
                     // Check if the file exists and send it
                     getFile(newsock, retBuf);
                     continue;
+                }
 
+                if (strcmp(cmd, "put") == 0) {
+                    char retBuf[1024];
+                    memset(retBuf, 0, 1024);
+
+                    // Read the name of the file
+                    getLine(newsock, retBuf);
+
+                    // Check if the file exists and send it
+                    putFile(newsock, retBuf);
+                    continue;
                 }
 
 //		char http_body[] = "hello world";
