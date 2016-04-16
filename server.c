@@ -10,6 +10,7 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <dirent.h>
 
 #include <arpa/inet.h>
 
@@ -25,7 +26,7 @@ void createSubdir(void) {
 
     // create the directory if it does not exist
     if (stat(dir, &st) == -1) {
-        printf("Creating ./files directory\n");
+        printf("Creating files directory\n");
         if (mkdir(dir, 0700) == -1) {
             perror(dir);
             exit(1); // May not want to do this
@@ -167,6 +168,17 @@ void example_listen(int sock, int queueSize)
 	}
 }
 
+/**
+ * Wrapper method for closing the socket
+ */
+void closeSock(int sock) {
+    if(close(sock) == -1)
+    {
+	perror("close");
+	exit(EXIT_FAILURE);
+    }
+}
+
 void recvBytes(int sock, char * recvbuf, int bufSize) {
 
     ssize_t recvdBytes = 0;
@@ -180,15 +192,14 @@ void recvBytes(int sock, char * recvbuf, int bufSize) {
 
 }
 
-/**
- * Wrapper method for closing the socket
- */
-void closeSock(int sock) {
-    if(close(sock) == -1)
-    {
-	perror("close");
-	exit(EXIT_FAILURE);
-    }
+void sendBytes(int sock, char * bytes, size_t size) {
+
+	if(send(sock, bytes, size, 0) == -1)
+	{
+		perror("send");
+		closeSock(sock);
+		exit(EXIT_FAILURE);
+	}
 }
 
 /**
@@ -206,6 +217,46 @@ int checkPass(int sock) {
     } else {
         return -1;
     }
+}
+
+/**
+ * Method to send the file data to the client
+ */
+void sendList(int sock) {
+
+    int numOfFiles;
+    struct dirent **namelist;
+    char buffer[1024];
+
+    // gather all the file names
+    numOfFiles = scandir(".", &namelist, NULL, alphasort);
+    if (numOfFiles == -1) {
+        printf("There was an error reading the directory - Exiting\n");
+        exit(EXIT_FAILURE);
+    }
+
+    struct stat fileInfo;
+
+    for (int i = 0; i < numOfFiles; i++) {
+
+        // gather the file info
+        if (stat(namelist[i]->d_name, &fileInfo) == -1) {
+            perror("stat");
+            exit(EXIT_FAILURE);
+        }
+
+        // put the information into a buffer
+        snprintf(buffer, 1024, "%s\n", namelist[i]->d_name);
+
+        // send the info to the client
+	sendBytes(sock, buffer, strlen(buffer));
+
+        //printf("%s %lld\n", namelist[i]->d_name, (long long) fileInfo.st_size);
+        free(namelist[i]);
+    }
+    free(namelist);
+
+    closeSock(sock);
 }
 
 int main(int argc, char* argv[])
@@ -241,7 +292,7 @@ int main(int argc, char* argv[])
 
 	while(1)
 	{
-                printf("Server waiting for connection\n");
+                printf("Waiting for connections...\n");
 		// Get a socket for a particular incoming connection.
 		int newsock = accept(sock, NULL, NULL);
 		if(newsock == -1)
@@ -260,17 +311,21 @@ int main(int argc, char* argv[])
                     printf("Password accepted - Continuing connection\n");
                 }
 
-		if(send(newsock, "You connected!\n", strlen("You connected!\n"), 0) == -1)
-		{
-			perror("send");
-			closeSock(newsock);
-			exit(EXIT_FAILURE);
-		}
+	        sendBytes(newsock, "You connected!\n", strlen("You connected!\n"));
 
                 char cmd[1024];
+                memset(cmd, 0, 1024);
                 recvBytes(newsock, cmd, 1024);
 
                 printf("Received command: %s\n", cmd);
+
+                if (strcmp(cmd, "list") == 0) {
+                    sendBytes(newsock, "File listing:\n", strlen("File listing:\n"));
+
+                    // Scan the dirextory and send the file list
+                    sendList(newsock);
+                    continue;
+                }
 
 //		char http_body[] = "hello world";
 //		char http_headers[1024];

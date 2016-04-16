@@ -69,6 +69,53 @@ void example_connect(int sock, struct addrinfo *ai)
 	}
 }
 
+/**
+ * Wrapper method for closing the socket
+ */
+void closeSock(int sock) {
+    if(close(sock) == -1)
+    {
+	perror("close");
+	exit(EXIT_FAILURE);
+    }
+}
+
+/**
+ * Wrapper function to control recieving bytes from the socket
+ */
+int recvBytes(int sock, char * recvbuf, int bufSize) {
+
+    ssize_t recvdBytes = 0;
+
+    recvdBytes = recv(sock, recvbuf, bufSize, 0);
+    if(recvdBytes < 0) {
+    	perror("recv:");
+    	close(sock);
+    	exit(EXIT_FAILURE);
+    }
+    else if(recvdBytes == 0) // server closed connection
+    {
+	fflush(stdout);
+	close(sock);
+	exit(EXIT_SUCCESS);
+    }
+    return recvdBytes;
+
+}
+
+/**
+ * Wrapper method to send bytes through the socket
+ */
+void sendBytes(int sock, char * bytes, size_t size) {
+
+	if(send(sock, bytes, size, 0) == -1)
+	{
+		perror("send");
+		closeSock(sock);
+		exit(EXIT_FAILURE);
+	}
+}
+
 
 int main(int argc, char* argv[])
 {
@@ -88,45 +135,37 @@ int main(int argc, char* argv[])
 	// socket(): create an endpoint for communication
 	int sock = example_socket(socketaddrinfo);
 
-        printf("Attempting to connect to server...\n");
+        printf("Connecting to server\n");
 	// connect(): initiate a connection on a socket
 	example_connect(sock, socketaddrinfo);
 	freeaddrinfo(socketaddrinfo); // done with socketaddrinfo
 
         // send the password
-        if(send(sock, password, strlen(password), 0) == -1)
-        {
-        	perror("send");
-        	close(sock);
-        	exit(EXIT_FAILURE);
-        }
+        printf("Sending password\n");
+        sendBytes(sock, password, strlen(password));
 
 	char recvbuf[1024];
 	ssize_t recvdBytes = 0;
 
-	recvdBytes = recv(sock, recvbuf, 1024, 0);
-	if(recvdBytes > 0) // print bytes we received to console
-		fwrite(recvbuf, 1, recvdBytes, stdout);
-	else if(recvdBytes == 0) // server closed connection
-	{
-		fflush(stdout);
-		close(sock);
-		exit(EXIT_SUCCESS);
-	}
-	else
-	{   // error receiving bytes
-		perror("recv:");
-		close(sock);
-		exit(EXIT_FAILURE);
-	}
+	recvdBytes = recvBytes(sock, recvbuf, 1024);
+	fwrite(recvbuf, 1, recvdBytes, stdout);
 
         // send the command
-        if(send(sock, argv[3], strlen(argv[3]), 0) == -1)
-        {
-        	perror("send");
-        	close(sock);
-        	exit(EXIT_FAILURE);
+        sendBytes(sock, argv[3], strlen(argv[3]));
+
+        // Recieve the bytes and print them out
+        while(1) {
+
+            char retBuf[1024];
+            ssize_t ret = 0;
+            memset(retBuf, 0, 1024);
+
+            ret = recvBytes(sock, retBuf, 1024);
+
+	    fwrite(retBuf, 1, ret, stdout);
         }
+
+        exit(EXIT_FAILURE);
 
 
 	// Send an HTTP request:
