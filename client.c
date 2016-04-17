@@ -229,6 +229,7 @@ void putCmd(int sock, char * filename) {
     }
     closeSock(sock);
     fclose(fp);
+    exit(EXIT_SUCCESS);
 }
 
 
